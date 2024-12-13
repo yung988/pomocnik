@@ -27,6 +27,79 @@ export interface Database {
           fragments_used_reset_at?: string
         }
       }
+      chats: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          created_at: string
+          updated_at: string
+          is_archived: boolean
+          last_message: string | null
+          model: string | null
+          template: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          created_at?: string
+          updated_at?: string
+          is_archived?: boolean
+          last_message?: string | null
+          model?: string | null
+          template?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          created_at?: string
+          updated_at?: string
+          is_archived?: boolean
+          last_message?: string | null
+          model?: string | null
+          template?: string | null
+        }
+      }
+      messages: {
+        Row: {
+          id: string
+          chat_id: string
+          role: 'user' | 'assistant'
+          content: Array<{
+            type: 'text' | 'code' | 'image'
+            text?: string
+            image?: string
+          }>
+          created_at: string
+          tokens_used: number | null
+        }
+        Insert: {
+          id?: string
+          chat_id: string
+          role: 'user' | 'assistant'
+          content: Array<{
+            type: 'text' | 'code' | 'image'
+            text?: string
+            image?: string
+          }>
+          created_at?: string
+          tokens_used?: number | null
+        }
+        Update: {
+          id?: string
+          chat_id?: string
+          role?: 'user' | 'assistant'
+          content?: Array<{
+            type: 'text' | 'code' | 'image'
+            text?: string
+            image?: string
+          }>
+          created_at?: string
+          tokens_used?: number | null
+        }
+      }
     }
   }
 } 

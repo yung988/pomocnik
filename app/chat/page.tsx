@@ -117,13 +117,27 @@ export default function ChatPage() {
   }
 
   const handleSelectChat = async (chat: any) => {
-    setSelectedChatId(chat.id)
-    setMessages(chat.messages)
-    setChatInput('')
-    setFiles([])
-    setFragment(undefined)
-    setResult(undefined)
-    setCurrentTab('code')
+    try {
+      setSelectedChatId(chat.id)
+      
+      // Načtení zpráv pro vybraný chat
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chat.id)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      setMessages(messages || [])
+      setChatInput('')
+      setFiles([])
+      setFragment(undefined)
+      setResult(undefined)
+      setCurrentTab('code')
+    } catch (error) {
+      console.error('Error loading messages:', error)
+    }
   }
 
   const handleDeleteChat = async (chatId: string) => {
@@ -152,32 +166,56 @@ export default function ChatPage() {
       const title = messages[0].content.find(c => c.type === 'text')?.text?.slice(0, 100) || 'Nový chat'
 
       if (selectedChatId) {
-        const { error } = await supabase
+        const { error: chatError } = await supabase
           .from('chats')
           .update({
-            messages,
+            title,
+            updated_at: new Date().toISOString(),
             last_message: lastMessage.content.find(c => c.type === 'text')?.text,
             model: languageModel.model,
             template: selectedTemplate,
           })
           .eq('id', selectedChatId)
 
-        if (error) throw error
+        if (chatError) throw chatError
+
+        const { error: messageError } = await supabase
+          .from('messages')
+          .insert({
+            chat_id: selectedChatId,
+            role: lastMessage.role,
+            content: lastMessage.content,
+            tokens_used: lastMessage.tokens_used,
+          })
+
+        if (messageError) throw messageError
       } else {
-        const { data, error } = await supabase
+        const { data: chat, error: chatError } = await supabase
           .from('chats')
           .insert({
             user_id: session.user.id,
             title,
-            messages,
             last_message: lastMessage.content.find(c => c.type === 'text')?.text,
             model: languageModel.model,
             template: selectedTemplate,
           })
           .select()
+          .single()
 
-        if (error) throw error
-        if (data?.[0]) setSelectedChatId(data[0].id)
+        if (chatError) throw chatError
+
+        const { error: messageError } = await supabase
+          .from('messages')
+          .insert({
+            chat_id: chat.id,
+            role: lastMessage.role,
+            content: lastMessage.content,
+            tokens_used: lastMessage.tokens_used,
+          })
+
+        if (messageError) throw messageError
+
+        setSelectedChatId(chat.id)
       }
     } catch (error) {
       console.error('Error saving chat:', error)
