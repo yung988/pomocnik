@@ -5,23 +5,31 @@ import { createMistral } from '@ai-sdk/mistral'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOllama } from 'ollama-ai-provider'
 
-export type LLMModel = {
+export interface LLMModel {
   id: string
   name: string
+  description: string
   provider: string
-  providerId: string
+  multiModal: boolean
+  contextWindow: number
+  maxTokens: number
+  inputTokenPrice: number
+  outputTokenPrice: number
+  trainingData: string
+  apiKeyRequired: boolean
+  baseURLConfigurable: boolean
 }
 
-export type LLMModelConfig = {
-  model?: string
+export interface LLMModelConfig {
+  model: string
   apiKey?: string
   baseURL?: string
   temperature?: number
+  maxTokens?: number
   topP?: number
   topK?: number
   frequencyPenalty?: number
   presencePenalty?: number
-  maxTokens?: number
 }
 
 export function getModelClient(model: LLMModel, config: LLMModelConfig) {

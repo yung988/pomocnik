@@ -7,7 +7,7 @@ import { usePostHog } from 'posthog-js/react'
 import { useLocalStorage } from 'usehooks-ts'
 import { experimental_useObject as useObject } from 'ai/react'
 import { Message, toAISDKMessages, toMessageImage } from '@/lib/messages'
-import { LLMModelConfig } from '@/lib/models'
+import { LLMModel, LLMModelConfig } from '@/lib/models'
 import modelsList from '@/lib/models.json'
 import { FragmentSchema, fragmentSchema as schema } from '@/lib/schema'
 import { supabase } from '@/lib/auth'
@@ -29,6 +29,17 @@ import { cn } from '@/lib/utils'
 
 interface ExtendedSession extends Session {
   apiKey?: string;
+}
+
+interface Chat {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  is_archived: boolean;
+  last_message: string | null;
+  model: string | null;
+  template: string | null;
 }
 
 export default function ChatPage() {
@@ -109,14 +120,14 @@ export default function ChatPage() {
       setChatInput(pendingPrompt)
       localStorage.removeItem('pendingPrompt')
     }
-  }, [])
+  }, [setChatInput])
 
   const handleNewChat = () => {
     handleClearChat()
     setSelectedChatId(undefined)
   }
 
-  const handleSelectChat = async (chat: any) => {
+  const handleSelectChat = async (chat: Chat) => {
     try {
       setSelectedChatId(chat.id)
       
@@ -226,7 +237,7 @@ export default function ChatPage() {
     if (messages.length > 0) {
       saveChat(messages)
     }
-  }, [messages])
+  }, [messages, saveChat])
 
   const handleSubmitAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -245,46 +256,35 @@ export default function ChatPage() {
       })
     }
 
-    const newMessage = {
-      role: 'user' as const,
+    const newMessage: Message = {
+      role: 'user',
       content,
     }
 
-    setMessages(prev => [...prev, newMessage])
-
-    submit({
-      userID: session?.user?.id,
-      messages: toAISDKMessages([...messages, newMessage]),
-      template: currentTemplate,
-      model: currentModel,
-      config: languageModel,
-    })
-
+    setMessages((messages) => [...messages, newMessage])
     setChatInput('')
     setFiles([])
-    setCurrentTab('code')
 
-    posthog.capture('chat_submit', {
+    await submit({
+      messages: toAISDKMessages([...messages, newMessage]),
+      userID: session?.user?.id || '',
       template: selectedTemplate,
-      model: languageModel.model,
+      model: currentModel?.id || 'claude-3-5-sonnet-latest',
+      config: languageModel,
     })
   }
 
   const handleClearChat = () => {
-    stop()
+    setMessages([])
     setChatInput('')
     setFiles([])
-    setMessages([])
     setFragment(undefined)
     setResult(undefined)
     setCurrentTab('code')
-    setIsPreviewLoading(false)
   }
 
   const handleUndo = () => {
-    setMessages(prev => prev.slice(0, -2))
-    setFragment(undefined)
-    setResult(undefined)
+    setMessages((messages) => messages.slice(0, -2))
   }
 
   if (isAuthLoading) {
@@ -344,82 +344,54 @@ export default function ChatPage() {
                 setCurrentPreview={({ fragment, result }) => {
                   setFragment(fragment)
                   setResult(result)
-                  if (window.innerWidth < 768) {
-                    setCurrentTab('fragment')
-                  }
+                  setCurrentTab('fragment')
                 }}
               />
             </div>
-            <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              <div className="container max-w-3xl mx-auto px-4">
-                <ChatInput
-                  retry={() =>
-                    submit({
-                      userID: session?.user?.id,
-                      messages: toAISDKMessages(messages),
-                      template: currentTemplate,
-                      model: currentModel,
-                      config: languageModel,
-                    })
-                  }
-                  isErrored={error !== undefined}
-                  isLoading={isLoading}
-                  isRateLimited={isRateLimited}
-                  stop={stop}
-                  input={chatInput}
-                  handleInputChange={(e) => setChatInput(e.target.value)}
-                  handleSubmit={handleSubmitAuth}
-                  isMultiModal={currentModel?.multiModal || false}
-                  files={files}
-                  handleFileChange={setFiles}
-                >
-                  <ChatPicker
-                    templates={templates}
-                    selectedTemplate={selectedTemplate}
-                    onSelectedTemplateChange={setSelectedTemplate}
-                    models={modelsList.models}
-                    languageModel={languageModel}
-                    onLanguageModelChange={(e) => setLanguageModel({ ...languageModel, ...e })}
-                  />
-                  <ChatSettings
-                    languageModel={languageModel}
-                    onLanguageModelChange={(e) => setLanguageModel({ ...languageModel, ...e })}
-                    apiKeyConfigurable={!process.env.NEXT_PUBLIC_NO_API_KEY_INPUT}
-                    baseURLConfigurable={!process.env.NEXT_PUBLIC_NO_BASE_URL_INPUT}
-                  />
-                </ChatInput>
+            <div className="flex flex-col gap-4 p-4 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="flex gap-2">
+                <ChatPicker
+                  templates={currentTemplate}
+                  selectedTemplate={selectedTemplate}
+                  onSelectedTemplateChange={setSelectedTemplate}
+                  models={modelsList.models}
+                  languageModel={languageModel}
+                  onLanguageModelChange={setLanguageModel}
+                />
+                <ChatSettings
+                  languageModel={languageModel}
+                  onLanguageModelChange={setLanguageModel}
+                />
               </div>
+              <ChatInput
+                input={chatInput}
+                setInput={setChatInput}
+                files={files}
+                setFiles={setFiles}
+                onSubmit={handleSubmitAuth}
+                isLoading={isLoading}
+                isRateLimited={isRateLimited}
+              />
             </div>
           </div>
           {fragment && (
-            <div 
-              className={cn(
-                "hidden md:block transition-opacity duration-300 border-l",
-                isPreviewLoading ? "opacity-50" : "opacity-100"
-              )}
-            >
+            <div className="hidden md:flex flex-col w-full max-h-[calc(100vh-4rem)] overflow-hidden border-l">
               <Preview
-                apiKey={session?.apiKey}
-                selectedTab={currentTab}
-                onSelectedTabChange={setCurrentTab}
-                isChatLoading={isLoading}
-                isPreviewLoading={isPreviewLoading}
                 fragment={fragment}
                 result={result}
-                onClose={() => {
-                  setFragment(undefined)
-                  setResult(undefined)
-                }}
+                isLoading={isPreviewLoading}
+                currentTab={currentTab}
+                onTabChange={setCurrentTab}
               />
             </div>
           )}
         </div>
       </div>
       <AuthDialog
-        open={isAuthDialogOpen}
-        setOpen={setAuthDialog}
+        isOpen={isAuthDialogOpen}
+        onClose={() => setAuthDialog(false)}
         view={authView}
-        supabase={supabase}
+        onViewChange={setAuthView}
       />
     </div>
   )
