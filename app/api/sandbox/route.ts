@@ -1,5 +1,5 @@
 import { FragmentSchema } from '@/lib/schema'
-import { ExecutionResultInterpreter, ExecutionResultWeb } from '@/lib/types'
+import { ExecutionResultInterpreter, ExecutionResultSandbox } from '@/lib/types'
 import { Sandbox } from '@e2b/code-interpreter'
 
 const sandboxTimeout = 10 * 60 * 1000 // 10 minute in ms
@@ -15,7 +15,6 @@ export async function POST(req: Request) {
     await req.json()
   console.log('fragment', fragment)
   console.log('userID', userID)
-  // console.log('apiKey', apiKey)
 
   // Create a interpreter or a sandbox
   const sbx = await Sandbox.create(fragment.template, {
@@ -34,11 +33,11 @@ export async function POST(req: Request) {
 
   // Copy code to fs
   if (fragment.code && Array.isArray(fragment.code)) {
-    fragment.code.forEach(async (file) => {
+    for (const file of fragment.code) {
       await sbx.files.write(file.file_path, file.file_content)
       console.log(`Copied file to ${file.file_path} in ${sbx.sandboxId}`)
-    })
-  } else {
+    }
+  } else if (fragment.code) {
     await sbx.files.write(fragment.file_path, fragment.code)
     console.log(`Copied file to ${fragment.file_path} in ${sbx.sandboxId}`)
   }
@@ -46,24 +45,23 @@ export async function POST(req: Request) {
   // Execute code or return a URL to the running sandbox
   if (fragment.template === 'code-interpreter-v1') {
     const { logs, error, results } = await sbx.runCode(fragment.code || '')
+    const output = logs ? `${logs.stdout || ''}${logs.stderr || ''}` : ''
 
     return new Response(
       JSON.stringify({
+        type: 'interpreter',
         sbxId: sbx?.sandboxId,
-        template: fragment.template,
-        stdout: logs.stdout,
-        stderr: logs.stderr,
-        runtimeError: error,
-        cellResults: results,
+        output,
+        error: error,
       } as ExecutionResultInterpreter),
     )
   }
 
   return new Response(
     JSON.stringify({
+      type: 'sandbox',
       sbxId: sbx?.sandboxId,
-      template: fragment.template,
       url: `https://${sbx?.getHost(fragment.port || 80)}`,
-    } as ExecutionResultWeb),
+    } as ExecutionResultSandbox),
   )
 }

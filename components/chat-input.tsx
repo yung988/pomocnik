@@ -1,14 +1,23 @@
+import React from 'react'
 import { Button } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { ArrowUp, Paperclip, Square, X } from 'lucide-react'
-import Image from 'next/image'
-import { SetStateAction, useMemo } from 'react'
-import TextareaAutosize from 'react-textarea-autosize'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import { ImageIcon, Loader2, SendIcon, Square, UndoIcon } from 'lucide-react'
+
+interface ChatInputProps {
+  retry: () => void
+  isErrored: boolean
+  isLoading: boolean
+  isRateLimited: boolean
+  stop: () => void
+  input: string
+  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  isMultiModal: boolean
+  files: File[]
+  handleFileChange: (files: File[]) => void
+  children?: React.ReactNode
+}
 
 export function ChatInput({
   retry,
@@ -23,184 +32,90 @@ export function ChatInput({
   files,
   handleFileChange,
   children,
-}: {
-  retry: () => void
-  isErrored: boolean
-  isLoading: boolean
-  isRateLimited: boolean
-  stop: () => void
-  input: string
-  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
-  isMultiModal: boolean
-  files: File[]
-  handleFileChange: (change: SetStateAction<File[]>) => void
-  children: React.ReactNode
-}) {
-  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    handleFileChange((prev) => [...prev, ...Array.from(e.target.files || [])])
-  }
+}: ChatInputProps) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  function handleFileRemove(file: File) {
-    handleFileChange((prev) => prev.filter((f) => f !== file))
-  }
-
-  const filePreview = useMemo(() => {
-    if (files.length === 0) return null
-    return Array.from(files).map((file) => {
-      return (
-        <div className="relative" key={file.name}>
-          <span
-            onClick={() => handleFileRemove(file)}
-            className="absolute top-[-8] right-[-8] bg-muted rounded-full p-1"
-          >
-            <X className="h-3 w-3 cursor-pointer" />
-          </span>
-          <Image
-            src={URL.createObjectURL(file)}
-            alt={file.name}
-            width={40}
-            height={40}
-            className="rounded-xl object-cover"
-          />
-        </div>
-      )
-    })
-  }, [files, handleFileRemove])
-
-  function onEnter(e: React.KeyboardEvent<HTMLFormElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault()
-      if (e.currentTarget.checkValidity()) {
-        handleSubmit(e)
-      } else {
-        e.currentTarget.reportValidity()
-      }
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleFileChange(Array.from(e.target.files))
     }
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      onKeyDown={onEnter}
-      className="mb-2 flex flex-col mt-auto bg-background"
-    >
-      {isErrored && (
-        <div
-          className={`flex items-center p-1.5 text-sm font-medium mb-2 rounded-xl ${
-            isRateLimited
-              ? 'bg-orange-400/10 text-orange-400'
-              : 'bg-red-400/10 text-red-400'
-          }`}
-        >
-          <span className="flex-1 px-1.5">
-            {isRateLimited
-              ? 'You have reached your request limit for the day.'
-              : 'An unexpected error has occurred.'}
-          </span>
-          <button
-            className={`px-2 py-1 rounded-sm ${
-              isRateLimited ? 'bg-orange-400/20' : 'bg-red-400/20'
-            }`}
-            onClick={retry}
-          >
-            Vyzkoušet znovu
-          </button>
-        </div>
-      )}
-      <div className="shadow-md rounded-2xl border">
-        <div className="flex items-center px-3 py-2 gap-1">{children}</div>
-        <TextareaAutosize
-          autoFocus={true}
-          minRows={1}
-          maxRows={5}
-          className="text-normal px-3 resize-none ring-0 bg-inherit w-full m-0 outline-none"
-          required={true}
-          placeholder="Popiš své zadání..."
-          disabled={isErrored}
+    <form onSubmit={handleSubmit} className="relative">
+      <div className="relative flex items-center">
+        <Textarea
+          tabIndex={0}
+          rows={1}
           value={input}
           onChange={handleInputChange}
+          placeholder="Napište zprávu..."
+          spellCheck={false}
+          className="min-h-[60px] w-full resize-none bg-transparent px-4 py-[1.3rem] focus-within:outline-none sm:text-sm"
+          disabled={isLoading || isRateLimited}
         />
-        <div className="flex p-3 gap-2 items-center">
-          <input
-            type="file"
-            id="multimodal"
-            name="multimodal"
-            accept="image/*"
-            multiple={true}
-            className="hidden"
-            onChange={handleFileInput}
-          />
-          <div className="flex items-center flex-1 gap-2">
-            <TooltipProvider>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Button
-                    disabled={!isMultiModal || isErrored}
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="rounded-xl h-10 w-10"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      document.getElementById('multimodal')?.click()
-                    }}
-                  >
-                    <Paperclip className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Přidat přílohy</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {files.length > 0 && filePreview}
-          </div>
-          <div>
-            {!isLoading ? (
-              <TooltipProvider>
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      disabled={isErrored}
-                      variant="default"
-                      size="icon"
-                      type="submit"
-                      className="rounded-xl h-10 w-10"
-                    >
-                      <ArrowUp className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Poslat zprávu</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+        <div className="absolute right-0 top-4 sm:right-4">
+          <div className="flex gap-2">
+            {isMultiModal && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || isRateLimited}
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
+            )}
+            {isErrored ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={retry}
+                disabled={isRateLimited}
+              >
+                <UndoIcon className="h-4 w-4" />
+              </Button>
+            ) : isLoading ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={stop}
+              >
+                <Square className="h-4 w-4" />
+              </Button>
             ) : (
-              <TooltipProvider>
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="rounded-xl h-10 w-10"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        stop()
-                      }}
-                    >
-                      <Square className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Zastavit generování</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                type="submit"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                disabled={!input && files.length === 0}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <SendIcon className="h-4 w-4" />
+                )}
+              </Button>
             )}
           </div>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground mt-2 text-center">
-        Pomocník je ai asistent vytvořený Panem Yungem{' '}
-        <a href="https://e2b.dev" target="_blank" className="text-[#E447B8]">
-          ✶ Y98
-        </a>
-      </p>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileInputChange}
+        className="hidden"
+        multiple
+      />
+      {children}
     </form>
   )
 }

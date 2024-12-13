@@ -1,20 +1,22 @@
-import { FragmentCode } from './fragment-code'
-import { FragmentPreview } from './fragment-preview'
-import { DeployDialog } from './deploy-dialog'
-import { Button } from '@/components/ui/button'
+import React from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
+import { XIcon } from 'lucide-react'
 import { FragmentSchema } from '@/lib/schema'
-import { ExecutionResult } from '@/lib/types'
+import { ExecutionResult, ExecutionResultSandbox } from '@/lib/types'
 import { DeepPartial } from 'ai'
-import { ChevronsRight, LoaderCircle } from 'lucide-react'
-import { Dispatch, SetStateAction } from 'react'
 import { cn } from '@/lib/utils'
+
+interface PreviewProps {
+  apiKey?: string
+  selectedTab: 'code' | 'fragment'
+  onSelectedTabChange: (tab: 'code' | 'fragment') => void
+  isChatLoading: boolean
+  isPreviewLoading: boolean
+  fragment: DeepPartial<FragmentSchema>
+  result: ExecutionResult | undefined
+  onClose: () => void
+}
 
 export function Preview({
   apiKey,
@@ -25,115 +27,78 @@ export function Preview({
   fragment,
   result,
   onClose,
-  className,
-}: {
-  apiKey: string | undefined
-  selectedTab: 'code' | 'fragment'
-  onSelectedTabChange: Dispatch<SetStateAction<'code' | 'fragment'>>
-  isChatLoading: boolean
-  isPreviewLoading: boolean
-  fragment?: DeepPartial<FragmentSchema>
-  result?: ExecutionResult
-  onClose: () => void
-  className?: string
-}) {
-  if (!fragment) {
-    return null
-  }
-
-  const isLinkAvailable = result?.template !== 'code-interpreter-v1'
+}: PreviewProps) {
+  const isSandbox = result?.type === 'sandbox'
 
   return (
-    <div 
-      className={cn(
-        "absolute md:relative top-0 left-0 shadow-2xl md:rounded-tl-3xl md:rounded-bl-3xl md:border-l md:border-y bg-popover h-full w-full overflow-auto",
-        className
-      )}
-    >
-      <Tabs
-        value={selectedTab}
-        onValueChange={(value) =>
-          onSelectedTabChange(value as 'code' | 'fragment')
-        }
-        className="h-full flex flex-col items-start justify-start"
-      >
-        <div className="w-full p-2 grid grid-cols-3 items-center border-b bg-background/50 backdrop-blur supports-[backdrop-filter]:bg-background/50">
-          <TooltipProvider>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground md:flex hidden"
-                  onClick={onClose}
-                >
-                  <ChevronsRight className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Zavřít sidebar</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <div className="flex justify-center">
-            <TabsList className="px-1 py-0 border h-8">
-              <TabsTrigger
-                className="font-normal text-xs py-1 px-2 gap-1 flex items-center"
-                value="code"
-              >
-                {isChatLoading && (
-                  <LoaderCircle
-                    strokeWidth={3}
-                    className="h-3 w-3 animate-spin"
-                  />
-                )}
-                Kód
-              </TabsTrigger>
-              <TabsTrigger
-                disabled={!result}
-                className="font-normal text-xs py-1 px-2 gap-1 flex items-center"
-                value="fragment"
-              >
-                Náhled
-                {isPreviewLoading && (
-                  <LoaderCircle
-                    strokeWidth={3}
-                    className="h-3 w-3 animate-spin"
-                  />
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          {result && (
-            <div className="flex items-center justify-end gap-2">
-              {isLinkAvailable && (
-                <DeployDialog
-                  url={result.url!}
-                  sbxId={result.sbxId!}
-                  apiKey={apiKey}
-                />
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between p-4 border-b">
+        <Tabs value={selectedTab} onValueChange={(v) => onSelectedTabChange(v as 'code' | 'fragment')}>
+          <TabsList>
+            <TabsTrigger value="code" disabled={!fragment?.code}>Kód</TabsTrigger>
+            <TabsTrigger value="fragment" disabled={!result}>Fragment</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <XIcon className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex-1 overflow-auto p-4">
+        <TabsContent value="code" className="mt-0">
+          {isPreviewLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-4 bg-muted rounded w-1/2" />
+              <div className="h-4 bg-muted rounded w-2/3" />
+            </div>
+          ) : fragment?.code ? (
+            <div className="relative">
+              <pre className={cn(
+                "p-4 rounded-lg bg-muted overflow-x-auto",
+                "text-sm font-mono"
+              )}>
+                {fragment.code}
+              </pre>
+              {fragment.file_path && (
+                <div className="absolute top-2 right-2 text-xs text-muted-foreground">
+                  {fragment.file_path}
+                </div>
               )}
             </div>
-          )}
-        </div>
-        {fragment && (
-          <div className="overflow-y-auto w-full h-full">
-            <TabsContent value="code" className="h-full mt-0">
-              {fragment.code && fragment.file_path && (
-                <FragmentCode
-                  files={[
-                    {
-                      name: fragment.file_path,
-                      content: fragment.code,
-                    },
-                  ]}
-                />
+          ) : null}
+        </TabsContent>
+        <TabsContent value="fragment" className="mt-0">
+          {isPreviewLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-4 bg-muted rounded w-1/2" />
+              <div className="h-4 bg-muted rounded w-2/3" />
+            </div>
+          ) : result ? (
+            <div className="space-y-4">
+              {isSandbox && (result as ExecutionResultSandbox).url && (
+                <div className="p-4 rounded-lg bg-muted">
+                  <p className="text-sm font-medium">URL:</p>
+                  <a 
+                    href={(result as ExecutionResultSandbox).url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-500 hover:underline break-all"
+                  >
+                    {(result as ExecutionResultSandbox).url}
+                  </a>
+                </div>
               )}
-            </TabsContent>
-            <TabsContent value="fragment" className="h-full mt-0">
-              {result && <FragmentPreview result={result as ExecutionResult} />}
-            </TabsContent>
-          </div>
-        )}
-      </Tabs>
+              <div className="p-4 rounded-lg bg-muted">
+                <p className="text-sm font-medium mb-2">Výsledek:</p>
+                <pre className="text-sm font-mono whitespace-pre-wrap">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </div>
+            </div>
+          ) : null}
+        </TabsContent>
+      </div>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { Message } from "@/lib/messages"
 import { Archive, Menu, MessageSquare, Plus, Search, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/auth"
 import { Session } from "@supabase/supabase-js"
 import {
@@ -52,19 +52,15 @@ export function ChatHistory({
   const [showArchived, setShowArchived] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      loadChats()
-    }
-  }, [session?.user?.id, showArchived])
+  const loadChats = useCallback(async () => {
+    if (!session?.user?.id) return
 
-  const loadChats = async () => {
     try {
       setIsLoading(true)
       const { data: chats, error } = await supabase
         .from("chats")
         .select("*")
-        .eq("user_id", session?.user?.id)
+        .eq("user_id", session.user.id)
         .eq("is_archived", showArchived)
         .order("updated_at", { ascending: false })
 
@@ -76,7 +72,11 @@ export function ChatHistory({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [session?.user?.id, showArchived])
+
+  useEffect(() => {
+    loadChats()
+  }, [loadChats])
 
   const filteredChats = chats.filter((chat) =>
     chat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

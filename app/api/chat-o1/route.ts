@@ -7,6 +7,7 @@ import { fragmentSchema as schema } from '@/lib/schema'
 import { Templates, templatesToPrompt } from '@/lib/templates'
 import { openai } from '@ai-sdk/openai'
 import { streamObject, LanguageModel, CoreMessage, generateText } from 'ai'
+import { Message } from '@/lib/messages'
 
 export const maxDuration = 60
 
@@ -16,6 +17,22 @@ const rateLimitMaxRequests = process.env.RATE_LIMIT_MAX_REQUESTS
 const ratelimitWindow = process.env.RATE_LIMIT_WINDOW
   ? (process.env.RATE_LIMIT_WINDOW as Duration)
   : '1d'
+
+function convertToUnifiedMessages(messages: CoreMessage[]): Message[] {
+  return messages.map(msg => {
+    // Convert role to either 'assistant' or 'user'
+    let role: 'assistant' | 'user' = msg.role === 'system' ? 'assistant' : msg.role === 'user' ? 'user' : 'assistant'
+
+    // Convert content to our Message format
+    let content = typeof msg.content === 'string'
+      ? [{ type: 'text' as const, text: msg.content }]
+      : Array.isArray(msg.content)
+      ? msg.content.map(c => typeof c === 'string' ? { type: 'text' as const, text: c } : { type: 'text' as const, text: String(c) })
+      : [{ type: 'text' as const, text: String(msg.content) }]
+
+    return { role, content }
+  })
+}
 
 export async function POST(req: Request) {
   const {
@@ -52,24 +69,26 @@ export async function POST(req: Request) {
   }
 
   console.log('userID', userID)
-  // console.log('template', template)
   console.log('model', model)
-  // console.log('config', config)
 
   const { model: modelNameString, apiKey: modelApiKey, ...modelParams } = config
   const modelClient = getModelClient(model, config)
 
-  messages.unshift({
+  const unifiedMessages = convertToUnifiedMessages(messages)
+  unifiedMessages.unshift({
     role: 'user',
-    content: toPrompt(template),
+    content: [{ type: 'text', text: toPrompt(template) }],
   })
 
-  const { text } = await generateText({
-    model: modelClient as LanguageModel,
-    messages,
-    ...modelParams,
+  // Convert the response to text first
+  const response = await modelClient.invoke({
+    messages: unifiedMessages,
+    stream: false,
   })
 
+  const text = await new Response(response).text()
+
+  // Then use the text for object streaming
   const stream = await streamObject({
     model: openai('gpt-4o-mini') as LanguageModel,
     schema,

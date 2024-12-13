@@ -1,21 +1,21 @@
 import { TemplateId } from './templates'
 import { ExecutionError, Result } from '@e2b/code-interpreter'
 
-type ExecutionResultBase = {
+export interface ExecutionResultBase {
+  url?: string
+  sbxId?: string
+}
+
+export interface ExecutionResultInterpreter extends ExecutionResultBase {
+  type: 'interpreter'
+  output: string
+  error?: string
+}
+
+export interface ExecutionResultSandbox extends ExecutionResultBase {
+  type: 'sandbox'
+  url: string
   sbxId: string
 }
 
-export type ExecutionResultInterpreter = ExecutionResultBase & {
-  template: 'code-interpreter-v1'
-  stdout: string[]
-  stderr: string[]
-  runtimeError?: ExecutionError
-  cellResults: Result[]
-}
-
-export type ExecutionResultWeb = ExecutionResultBase & {
-  template: Exclude<TemplateId, 'code-interpreter-v1'>
-  url: string
-}
-
-export type ExecutionResult = ExecutionResultInterpreter | ExecutionResultWeb
+export type ExecutionResult = ExecutionResultInterpreter | ExecutionResultSandbox

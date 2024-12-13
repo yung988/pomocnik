@@ -6,6 +6,7 @@ import ratelimit from '@/lib/ratelimit'
 import { fragmentSchema as schema } from '@/lib/schema'
 import { Templates } from '@/lib/templates'
 import { streamObject, LanguageModel, CoreMessage } from 'ai'
+import { Message } from '@/lib/messages'
 
 export const maxDuration = 60
 
@@ -50,19 +51,39 @@ export async function POST(req: Request) {
     })
   }
 
-  console.log('userID', userID)
-  // console.log('template', template)
-  console.log('model', model)
-  // console.log('config', config)
-
   const { model: modelNameString, apiKey: modelApiKey, ...modelParams } = config
   const modelClient = getModelClient(model, config)
 
+  // Convert CoreMessage[] to Message[]
+  const unifiedMessages: Message[] = messages.map(msg => ({
+    role: msg.role === 'system' ? 'assistant' : msg.role === 'user' ? 'user' : 'assistant',
+    content: typeof msg.content === 'string'
+      ? [{ type: 'text', text: msg.content }]
+      : Array.isArray(msg.content)
+      ? msg.content.map(c => typeof c === 'string' ? { type: 'text', text: c } : { type: 'text', text: String(c) })
+      : [{ type: 'text', text: String(msg.content) }]
+  }))
+
+  // Add system prompt
+  unifiedMessages.unshift({
+    role: 'user',
+    content: [{ type: 'text', text: toPrompt(template) }]
+  })
+
+  // Get response from model
+  const response = await modelClient.invoke({
+    messages: unifiedMessages,
+    stream: false
+  })
+
+  const text = await new Response(response).text()
+
+  // Stream the object
   const stream = await streamObject({
-    model: modelClient as LanguageModel,
+    model: modelClient as unknown as LanguageModel,
     schema,
     system: toPrompt(template),
-    messages,
+    prompt: text,
     mode: getDefaultMode(model),
     ...modelParams,
   })

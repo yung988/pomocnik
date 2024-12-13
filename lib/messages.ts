@@ -22,6 +22,7 @@ export type Message = {
   content: Array<MessageText | MessageCode | MessageImage>
   object?: DeepPartial<FragmentSchema>
   result?: ExecutionResult
+  tokens_used?: number
 }
 
 export function toAISDKMessages(messages: Message[]) {

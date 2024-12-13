@@ -5,6 +5,7 @@
       "name": "Claude 3.5 Sonnet",
       "description": "Nejnovější model od Anthropic, optimalizovaný pro rychlost a efektivitu",
       "provider": "Anthropic",
+      "providerId": "anthropic",
       "multiModal": true,
       "contextWindow": 200000,
       "maxTokens": 4096,
@@ -19,6 +20,7 @@
       "name": "GPT-4 Turbo",
       "description": "Nejnovější model od OpenAI s podporou obrázků a dlouhým kontextem",
       "provider": "OpenAI",
+      "providerId": "openai",
       "multiModal": true,
       "contextWindow": 128000,
       "maxTokens": 4096,
@@ -33,6 +35,7 @@
       "name": "Mistral Large",
       "description": "Výkonný model od Mistral AI s dlouhým kontextem",
       "provider": "Mistral",
+      "providerId": "mistral",
       "multiModal": false,
       "contextWindow": 32768,
       "maxTokens": 4096,
@@ -43,4 +46,4 @@
       "baseURLConfigurable": false
     }
   ]
-}
+} 

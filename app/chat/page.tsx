@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Session } from '@supabase/supabase-js'
 import { usePostHog } from 'posthog-js/react'
@@ -8,14 +8,14 @@ import { useLocalStorage } from 'usehooks-ts'
 import { experimental_useObject as useObject } from 'ai/react'
 import { Message, toAISDKMessages, toMessageImage } from '@/lib/messages'
 import { LLMModel, LLMModelConfig } from '@/lib/models'
-import modelsList from '@/lib/models.json'
+import { defaultModels } from '@/lib/models'
 import { FragmentSchema, fragmentSchema as schema } from '@/lib/schema'
 import { supabase } from '@/lib/auth'
 import templates, { TemplateId } from '@/lib/templates'
 import { ExecutionResult } from '@/lib/types'
 import { DeepPartial } from 'ai'
 import { AuthViewType, useAuth } from '@/lib/auth'
-import { Chat } from '@/components/chat'
+import { Chat as ChatComponent } from '@/components/chat'
 import { ChatInput } from '@/components/chat-input'
 import { ChatPicker } from '@/components/chat-picker'
 import { ChatSettings } from '@/components/chat-settings'
@@ -42,6 +42,11 @@ interface Chat {
   template: string | null;
 }
 
+interface PreviewState {
+  fragment: DeepPartial<FragmentSchema>;
+  result: ExecutionResult;
+}
+
 export default function ChatPage() {
   const router = useRouter()
   const [isAuthDialogOpen, setAuthDialog] = useState(false)
@@ -62,7 +67,7 @@ export default function ChatPage() {
   const [isRateLimited, setIsRateLimited] = useState(false)
   const [selectedChatId, setSelectedChatId] = useState<string>()
 
-  const currentModel = modelsList.models.find(
+  const currentModel = defaultModels.find(
     (model) => model.id === languageModel.model,
   )
   const currentTemplate =
@@ -131,7 +136,6 @@ export default function ChatPage() {
     try {
       setSelectedChatId(chat.id)
       
-      // Načtení zpráv pro vybraný chat
       const { data: messages, error } = await supabase
         .from('messages')
         .select('*')
@@ -140,7 +144,7 @@ export default function ChatPage() {
 
       if (error) throw error
 
-      setMessages(messages || [])
+      setMessages(messages as Message[])
       setChatInput('')
       setFiles([])
       setFragment(undefined)
@@ -169,7 +173,7 @@ export default function ChatPage() {
     }
   }
 
-  const saveChat = async (messages: Message[]) => {
+  const saveChat = useCallback(async (messages: Message[]) => {
     if (!session?.user?.id || messages.length === 0) return
 
     try {
@@ -231,7 +235,7 @@ export default function ChatPage() {
     } catch (error) {
       console.error('Error saving chat:', error)
     }
-  }
+  }, [session, selectedChatId, languageModel.model, selectedTemplate])
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -334,16 +338,16 @@ export default function ChatPage() {
             )}
           >
             <div className="flex-1 overflow-auto px-4">
-              <Chat
+              <ChatComponent
                 messages={messages}
                 isLoading={isLoading}
                 onClear={handleClearChat}
                 canClear={messages.length > 0}
                 onUndo={handleUndo}
                 canUndo={messages.length > 1 && !isLoading}
-                setCurrentPreview={({ fragment, result }) => {
-                  setFragment(fragment)
-                  setResult(result)
+                setCurrentPreview={(state: PreviewState) => {
+                  setFragment(state.fragment)
+                  setResult(state.result)
                   setCurrentTab('fragment')
                 }}
               />
@@ -354,7 +358,7 @@ export default function ChatPage() {
                   templates={currentTemplate}
                   selectedTemplate={selectedTemplate}
                   onSelectedTemplateChange={setSelectedTemplate}
-                  models={modelsList.models}
+                  models={defaultModels}
                   languageModel={languageModel}
                   onLanguageModelChange={setLanguageModel}
                 />
@@ -364,34 +368,54 @@ export default function ChatPage() {
                 />
               </div>
               <ChatInput
-                input={chatInput}
-                setInput={setChatInput}
-                files={files}
-                setFiles={setFiles}
-                onSubmit={handleSubmitAuth}
+                retry={() => {
+                  submit({
+                    messages: toAISDKMessages(messages),
+                    userID: session?.user?.id || '',
+                    template: selectedTemplate,
+                    model: currentModel?.id || 'claude-3-5-sonnet-latest',
+                    config: languageModel,
+                  })
+                }}
+                isErrored={error !== undefined}
                 isLoading={isLoading}
                 isRateLimited={isRateLimited}
-              />
+                stop={stop}
+                input={chatInput}
+                handleInputChange={(e) => setChatInput(e.target.value)}
+                handleSubmit={handleSubmitAuth}
+                isMultiModal={currentModel?.multiModal || false}
+                files={files}
+                handleFileChange={setFiles}
+              >
+                {null}
+              </ChatInput>
             </div>
           </div>
           {fragment && (
             <div className="hidden md:flex flex-col w-full max-h-[calc(100vh-4rem)] overflow-hidden border-l">
               <Preview
+                apiKey={session?.apiKey}
+                selectedTab={currentTab}
+                onSelectedTabChange={setCurrentTab}
+                isChatLoading={isLoading}
+                isPreviewLoading={isPreviewLoading}
                 fragment={fragment}
                 result={result}
-                isLoading={isPreviewLoading}
-                currentTab={currentTab}
-                onTabChange={setCurrentTab}
+                onClose={() => {
+                  setFragment(undefined)
+                  setResult(undefined)
+                }}
               />
             </div>
           )}
         </div>
       </div>
       <AuthDialog
-        isOpen={isAuthDialogOpen}
-        onClose={() => setAuthDialog(false)}
+        open={isAuthDialogOpen}
+        setOpen={setAuthDialog}
         view={authView}
-        onViewChange={setAuthView}
+        supabase={supabase}
       />
     </div>
   )
